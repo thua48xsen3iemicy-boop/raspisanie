@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Расписание на сегодня</title>
+<!-- Число в ?v= — метка версии. Меняйте его при каждой правке
+     tv.css или tv.js, иначе телевизор возьмёт файлы из кеша. -->
+<link rel="stylesheet" href="tv.css?v=12">
+<!--
+  Табло для телевизора в холле. Открывать в браузере на весь экран (F11).
+  Каталог самостоятельный: расписания берутся из ../s/, список из ../list.txt.
+  Параметры в адресе:
+    tv.html?dark       — тёмная тема, если в холле темно и белый экран слепит
+    tv.html?safe=5     — поле по краям в процентах, если телевизор режет края
+                         (0 — впритык, по умолчанию 3)
+    tv.html?groups=8   — сколько групп в одной полосе, если автоподбор не угадал
+    tv.html?bands=2    — на сколько полос переносить таблицу
+    tv.html?bleed=92   — вытянуть страницу за края экрана на 92 пикселя
+                         (лечит поля, которые телевизор оставляет под оверскан)
+    tv.html?bleedy=48  — то же сверху и снизу
+  Настройки по умолчанию — в начале tv.js.
+-->
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar__left">
+    <span class="bar__gerb" aria-hidden="true"></span>
+    <div>
+      <p class="bar__day" id="day">Загрузка</p>
+      <p class="bar__date" id="date"></p>
+    </div>
+  </div>
+
+  <p class="bar__note" id="note"></p>
+
+  <div class="bar__right">
+    <p class="clock" id="clock">--:--</p>
+  </div>
+</header>
+
+<main class="board" id="board"></main>
+
+<!-- Место под бегущую строку. Высота задана в tv.css (.ticker),
+     таблица сама пересчитает свободное пространство. -->
+<footer class="ticker" id="ticker"></footer>
+
+<script src="parse.js?v=12" defer></script>
+<script src="tv.js?v=12" defer></script>
+</body>
+</html>

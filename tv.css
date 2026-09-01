@@ -1,0 +1,216 @@
+/* Табло расписания для телевизора в холле.
+   Тёмное по белому: мелкий текст так читается легче, чем светлый по тёмному —
+   тонкие штрихи букв на светлом фоне не «заплывают».
+   Всё влезает в один экран, ничего не движется и не листается. */
+
+:root{
+  --bg:#ffffff;
+  --panel:#eef1f6;      /* левые колонки и шапка */
+  --row:#ffffff;        /* ячейка занятия */
+  --dim:#f5f7fa;        /* фон чётных дней */
+  --ink:#0f1622;
+  --ink-2:#5a6675;
+  --line:#c9d2de;       /* сетка */
+  --sep:#8b98a9;        /* черта между днями */
+  --accent:#1f3bbf;
+  --accent-rgb:31,59,191;
+  --now:#ffcf33;
+  --now-rgb:255,207,51;
+  /* поля страницы, толщину линий и ширину левых колонок задаёт tv.js
+     по сетке физических пикселей; здесь — запасные значения */
+  --hair:1px;--padx:0px;--barpadx:10px;--pady:4px;--bandgap:8px;--dayw:34px;--pairw:64px;
+  --mono:ui-monospace,"SFMono-Regular","Cascadia Mono","Roboto Mono",Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+/* тёмная тема, если холл тёмный: tv.html?dark */
+:root[data-tv=dark]{
+  --bg:#0e1219;--panel:#1b2230;--row:#141a24;--dim:#181f2b;
+  --ink:#f2f5fa;--ink-2:#93a1b5;--line:#2a3341;--sep:#4a596d;--accent:#7b8dff;--accent-rgb:123,141,255;
+}
+
+*{box-sizing:border-box}
+/* Телевизионные браузеры нередко сами отступают от краёв экрана на
+   несколько процентов — «безопасная зона» под оверскан. Задаёт это их
+   встроенная таблица стилей, поэтому обычным обнулением полей не убирается.
+   Прижимаем страницу к краям принудительно: у элемента с position:fixed
+   точкой отсчёта служит экран, а не поле родителя. */
+html,body{
+  margin:0;padding:0;border:0;
+  height:100%;width:100%;
+  overflow:hidden;overflow-x:hidden
+}
+body{
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  /* ограничение по ширине здесь недопустимо: при вылете за края (bleed)
+     оно обрезало бы страницу по ширине экрана, и справа оставалась бы
+     ровно та величина, на которую сдвинут левый край */
+  max-width:none;max-height:none;
+  background:var(--bg);color:var(--ink);
+  font-family:var(--sans);
+  display:flex;flex-direction:column;
+  cursor:none;user-select:none;-webkit-user-select:none
+}
+
+/* ── Верхняя полоса ─────────────────────────────────────── */
+.bar{
+  /* высоту в целых пикселях выставляет tv.js, здесь — запасное значение */
+  flex:none;height:5.6vh;box-sizing:border-box;
+  display:flex;align-items:center;gap:1.6vw;
+  padding:0 var(--barpadx);background:var(--panel);
+  border-bottom:var(--hair) solid var(--sep)
+}
+.bar__left{display:flex;align-items:center;gap:.9vw;min-width:0}
+.bar__gerb{
+  position:relative;flex:none;width:4.4vh;height:4.4vh;border-radius:50%;
+  background:url(/gerb-w.png) center/contain no-repeat
+}
+:root[data-tv=dark] .bar__gerb{background-image:url(/gerb-b.png)}
+/* расходящееся кольцо вокруг герба — то же, что на обычной странице */
+.bar__gerb::before{
+  content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  animation:pulse-gerb 3.6s ease-in-out infinite
+}
+@keyframes pulse-gerb{
+  0%,100%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),.32)}
+  50%{box-shadow:0 0 0 1.4vh rgba(var(--accent-rgb),0)}
+}
+.bar__day{margin:0;font-size:2.3vh;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.bar__date{margin:.1vh 0 0;font-family:var(--mono);font-size:1.4vh;color:var(--ink-2)}
+.bar__note{flex:1 1 auto;margin:0;text-align:center;font-size:1.6vh;color:var(--ink-2)}
+.bar__right{margin-left:auto;text-align:right}
+.clock{
+  margin:0;font-family:var(--mono);font-size:3.2vh;font-weight:700;
+  line-height:1;font-variant-numeric:tabular-nums
+}
+
+/* ── Нижняя полоса ──────────────────────────────────────────
+   Пока пустая: место оставлено под бегущую строку. Высота задана здесь,
+   таблица считает свободное пространство сама и в эту полосу не залезет. */
+.ticker{
+  /* высоту в целых пикселях выставляет tv.js, здесь — запасное значение */
+  flex:none;height:6vh;box-sizing:border-box;background:var(--panel);
+  padding:0 var(--barpadx);border-top:var(--hair) solid var(--sep);
+  display:flex;align-items:center;overflow:hidden
+}
+
+/* ── Таблица ────────────────────────────────────────────────
+   Строки — день недели и номер пары за всю неделю, колонки — группы.
+   Не влезающие по ширине группы переносятся полосой ниже, где колонки
+   дня и пары рисуются заново. Высоту строки считает tv.js и кладёт
+   в --rh, от неё отсчитывается весь кегль. */
+
+.board{
+  flex:1 1 auto;min-height:0;overflow:hidden;
+  /* отступы и толщину линий задаёт tv.js по сетке физических пикселей */
+  padding:var(--pady) var(--padx);
+  --rh:30px;--snap:1
+}
+.band{
+  /* Ширина колонок подобрана так, что полоса точно равна контейнеру:
+     ни центрировать, ни обрезать фон не нужно. Отступ снизу в целых
+     пикселях — иначе следующая полоса начнётся на дробной координате. */
+  /* страховка от переполнения: даже если расчёт ошибётся, полоса не станет
+     шире экрана и телевизор не начнёт ужимать страницу */
+  max-width:100%;
+  display:grid;gap:var(--hair);background:var(--line);
+  border:var(--hair) solid var(--line);margin-bottom:var(--bandgap);
+  /* высоту строки задаём явно: иначе строки растут по содержимому
+     и внизу экрана остаётся незанятая полоса */
+  grid-auto-rows:var(--rh)
+}
+.band:last-child{margin-bottom:0}
+
+/* шапка полосы */
+.head{
+  background:var(--panel);
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:calc(var(--rh) * .46);
+  padding:calc(var(--rh) * .12) .25em;min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.head--corner{
+  grid-column:1/3;font-family:var(--mono);
+  font-size:calc(var(--rh) * .36);color:var(--ink-2)
+}
+.head--group{font-family:var(--mono);letter-spacing:.01em}
+
+/* колонка дня: одна ячейка на все пары дня, надпись повёрнута */
+.day{
+  grid-column:1;background:var(--panel);
+  display:flex;align-items:center;justify-content:center;
+  writing-mode:vertical-rl;transform:rotate(180deg);
+  font-weight:700;font-size:calc(var(--rh) * .46);letter-spacing:.04em;
+  white-space:nowrap;overflow:hidden
+}
+
+/* номер пары и время */
+/* Номер и время — две колонки фиксированной ширины, а не строка по центру:
+   при центрировании номер съезжал влево-вправо вслед за длиной времени,
+   и цифры в столбце переставали стоять друг под другом. */
+.slot{
+  grid-column:2;background:var(--panel);
+  display:grid;grid-template-columns:1.15em 1fr;align-items:center;gap:.3em;
+  padding:0 .35em;font-family:var(--mono);min-width:0;overflow:hidden;
+  font-variant-numeric:tabular-nums
+}
+.slot__no{
+  font-size:calc(var(--rh) * .46);font-weight:700;
+  text-align:right;line-height:1
+}
+.slot__time{
+  font-size:calc(var(--rh) * .34);color:var(--ink-2);
+  text-align:left;line-height:1
+}
+
+/* занятие */
+.cell{
+  background:var(--row);min-width:0;overflow:hidden;
+  /* отступ привязан к высоте строки, как и кегль: при .3em он считался от
+     размера шрифта страницы и на крупном экране оказывался слишком мал —
+     номер кабинета в правой колонке упирался в край таблицы */
+  padding:0 calc(var(--rh) * .16);
+  display:flex;flex-direction:column;justify-content:center;
+  line-height:1.08
+}
+.subject{
+  font-size:calc(var(--rh) * .44);font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+/* Номер кабинета не обрезается никогда: он flex:none, а ужимается и
+   пропадает слово-приставка. Многоточие убрано — оно само съедало место. */
+.room{
+  display:flex;justify-content:flex-end;align-items:baseline;gap:.25em;
+  font-family:var(--mono);font-size:calc(var(--rh) * .33);color:var(--ink);
+  white-space:nowrap;overflow:hidden;min-width:0
+}
+.room .pre{flex:0 1 auto;min-width:0;overflow:hidden;color:var(--ink-2)}
+.room b{flex:none;font-weight:700}
+.room i{font-style:normal;font-weight:700;color:var(--accent)}
+.cell--empty{background:var(--row)}
+
+/* добивка до полной ширины в неполной полосе */
+.head--pad,.cell--pad{background:var(--bg)}
+
+/* ── Разделение дней ────────────────────────────────────────
+   Чётные дни идут другим фоном — этого хватает, чтобы глаз видел границу
+   без дополнительных линий. */
+.dim{background:var(--dim)}
+.dim.cell--empty{background:var(--dim)}
+
+/* Сегодняшний день. Правило должно идти ПОСЛЕ чередования и быть не слабее
+   по селектору: иначе в затенённый день .dim перебивал заливку, буквы
+   оставались белыми, а синего фона под ними не было. */
+.day.day--today{background:var(--accent);color:#fff}
+/* номер пары в сегодняшнем дне — тем же синим, но только текстом */
+.slot.slot--today .slot__no{color:var(--accent)}
+
+/* Подсветка идущей пары отключена. Правила лежали здесь: фон
+   rgba(var(--now-rgb),.45) на ячейках строки и .75 на номере пары. */
+
+/* ── Сообщения ──────────────────────────────────────────── */
+.msg{
+  display:grid;place-items:center;height:100%;text-align:center;
+  font-size:3vh;color:var(--ink-2)
+}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
