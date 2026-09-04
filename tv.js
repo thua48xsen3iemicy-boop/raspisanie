@@ -205,17 +205,37 @@ function roomHtml(where) {
     : '<b>' + esc(where) + '</b>';
 }
 
+/* Кто ведёт: в файле группы это преподаватель, в файле преподавателя —
+   группа, то есть всегда «вторая сторона» занятия. Одно и то же имя на
+   все подгруппы пишется один раз без номера: повторять фамилию незачем.
+   Когда имена разные, номер связывает имя слева с кабинетом справа. */
+function whoHtml(variants) {
+  var names = [];
+  variants.forEach(function (v) {
+    if (v.who && names.indexOf(v.who) < 0) names.push(v.who);
+  });
+  if (!names.length) return '';
+  if (names.length === 1) return esc(names[0]);
+  return variants.map(function (v, i) {
+    return v.who ? '<i>' + (i + 1) + '</i>\u00a0' + esc(v.who) : '';
+  }).filter(Boolean).join(' · ');
+}
+
 function cellHtml(lesson, key, band) {
   band = band || '';
   if (!lesson) return '<div class="cell cell--empty' + band + '" data-k="' + key + '"></div>';
   var rooms = lesson.variants.map(function (v, i) {
-    var where = v.room || v.who;
+    if (!v.room) return '';
     return lesson.variants.length > 1
-      ? '<i>' + (i + 1) + '</i>\u00a0' + roomHtml(where) : roomHtml(where);
-  }).join(' · ');
+      ? '<i>' + (i + 1) + '</i>\u00a0' + roomHtml(v.room) : roomHtml(v.room);
+  }).filter(Boolean).join(' · ');
+  var who = whoHtml(lesson.variants);
   return '<div class="cell' + band + '" data-k="' + key + '">' +
     '<span class="subject">' + esc(lesson.subject) + '</span>' +
-    (rooms ? '<span class="room">' + rooms + '</span>' : '') + '</div>';
+    (who || rooms
+      ? '<span class="meta"><span class="who">' + who + '</span>' +
+        '<span class="room">' + rooms + '</span></span>'
+      : '') + '</div>';
 }
 
 /* Телевизор отводит странице «безопасную зону» под оверскан — на 3072
@@ -463,7 +483,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 15;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 16;   /* поднимайте вместе с ?v= в tv.html */
 
 function refresh() {
   loadAll().then(function (failed) {
