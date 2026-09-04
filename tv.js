@@ -393,8 +393,8 @@ function draw() {
     snap(safeSide('safebot', SAFE_BOT_PX, pctY)) + 'px';
 
   var vh = window.innerHeight / 100;
-  if (els.bar) els.bar.style.height = snap(vh * 5.6) + 'px';
-  if (els.ticker) els.ticker.style.height = snap(vh * 4) + 'px';
+  if (els.bar) els.bar.style.height = snap(vh * 4.4) + 'px';
+  if (els.ticker) els.ticker.style.height = snap(vh * 2) + 'px';
 
   /* Поля кладём на корень документа, а не на таблицу: тогда шапка и нижняя
      полоса берут ровно те же отступы и их края совпадают с краями таблицы. */
@@ -572,7 +572,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 23;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 24;   /* поднимайте вместе с ?v= в tv.html */
 
 /* Версия — в заголовок вкладки. На телевизоре его не видно (табло идёт во
    весь экран), зато в обычном браузере сразу ясно, какие файлы загружены:

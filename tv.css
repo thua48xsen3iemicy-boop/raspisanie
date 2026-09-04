@@ -51,10 +51,16 @@ body{
   cursor:none;user-select:none;-webkit-user-select:none
 }
 
-/* ── Верхняя полоса ─────────────────────────────────────── */
+/* ── Верхняя полоса ───────────────────────────────────────
+   Высоту держат две вещи: герб и левый блок из дня и даты в две строки.
+   Поэтому ужимать её в одиночку нельзя — вместе с полосой уменьшены и они,
+   иначе содержимое просто не поместится. Считается так:
+   день 2.0 * 1.1 + отступ .1 + дата 1.2 * 1.2 = 3.84vh, герб 3.4vh —
+   и то и другое ниже 4.4vh. Всё, чего полоса не занимает, достаётся
+   таблице и уходит в кегль. */
 .bar{
   /* высоту в целых пикселях выставляет tv.js, здесь — запасное значение */
-  flex:none;height:5.6vh;box-sizing:border-box;
+  flex:none;height:4.4vh;box-sizing:border-box;
   display:flex;align-items:center;gap:1.6vw;
   /* фон страницы, а не серый заливкой: полоса читается как поле листа,
      от таблицы её отделяет черта снизу */
@@ -63,7 +69,7 @@ body{
 }
 .bar__left{display:flex;align-items:center;gap:.9vw;min-width:0}
 .bar__gerb{
-  position:relative;flex:none;width:4.4vh;height:4.4vh;border-radius:50%;
+  position:relative;flex:none;width:3.4vh;height:3.4vh;border-radius:50%;
   background:url(/gerb-w.png) center/contain no-repeat
 }
 :root[data-tv=dark] .bar__gerb{background-image:url(/gerb-b.png)}
@@ -74,27 +80,27 @@ body{
 }
 @keyframes pulse-gerb{
   0%,100%{box-shadow:0 0 0 0 rgba(var(--accent-rgb),.32)}
-  50%{box-shadow:0 0 0 1.4vh rgba(var(--accent-rgb),0)}
+  50%{box-shadow:0 0 0 1.1vh rgba(var(--accent-rgb),0)}
 }
-.bar__day{margin:0;font-size:2.3vh;font-weight:800;letter-spacing:-.02em;line-height:1.1}
-.bar__date{margin:.1vh 0 0;font-family:var(--mono);font-size:1.4vh;color:var(--ink-2)}
-.bar__note{flex:1 1 auto;margin:0;text-align:center;font-size:1.6vh;color:var(--ink-2)}
+.bar__day{margin:0;font-size:2vh;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.bar__date{margin:.1vh 0 0;font-family:var(--mono);font-size:1.2vh;color:var(--ink-2)}
+.bar__note{flex:1 1 auto;margin:0;text-align:center;font-size:1.4vh;color:var(--ink-2)}
 .bar__right{margin-left:auto;text-align:right}
 .clock{
-  margin:0;font-family:var(--mono);font-size:3.2vh;font-weight:700;
+  margin:0;font-family:var(--mono);font-size:2.8vh;font-weight:700;
   line-height:1;font-variant-numeric:tabular-nums
 }
 
 /* ── Нижняя полоса ──────────────────────────────────────────
    Пока пустая: место оставлено под бегущую строку. Высота задана здесь,
    таблица считает свободное пространство сама и в эту полосу не залезет.
-   Четыре сотых экрана — это 86 пикселей на 4K, с запасом на строку кеглем
-   1.6vh, каким набрана надпись в шапке. Всё, чего полоса не занимает,
-   достаётся таблице и уходит в кегль: она делит освободившееся между
-   тремя десятками строк. */
+   Две сотых экрана — это 43 пикселя на 4K: строка кеглем 1.4vh, каким
+   набрана надпись в шапке, занимает со своим строчным боксом 36 из них.
+   Ставя сюда бегущую строку, держитесь этого кегля или мельче — иначе
+   полосу придётся поднимать, а высота у неё общая с таблицей. */
 .ticker{
   /* высоту в целых пикселях выставляет tv.js, здесь — запасное значение */
-  flex:none;height:4vh;box-sizing:border-box;background:var(--bg);
+  flex:none;height:2vh;box-sizing:border-box;background:var(--bg);
   padding:0 var(--barpadx);border-top:var(--hair) solid var(--sep);
   display:flex;align-items:center;overflow:hidden
 }
