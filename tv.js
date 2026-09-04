@@ -17,6 +17,12 @@ var GOOD_COL_PX = 150;     // ширина колонки группы, при �
 var GOOD_ROW_PX = 30;      // высота строки, при которой читается легко
 var PAD_X = 0;             // поле таблицы от боков экрана, пикселей
 var BAR_PAD_X = 10;        // поле шапки и нижней полосы
+/* Ниже этой высоты строки занятие по подгруппам не разворачивается на две
+   строки: три текстовые линии вместо двух вышли бы мельче десяти пикселей,
+   и подгруппы остаются в одну строку с номерами. Порог сдвигается из
+   адреса — tv.html?split=30, — чтобы посмотреть на своём экране, где
+   проходит граница читаемости; 0 разворачивает всегда. */
+var SPLIT_MIN_ROW_PX = 42;
 
 /* Табло лежит в своём каталоге, расписания — уровнем выше.
    Если разложите иначе, поправьте только эти два пути. */
@@ -66,6 +72,7 @@ var els = {
 var groups = [];    // [{title, at: {'дата/пара': урок}}]
 var view = null;    // {rows, days, from, to}
 var skew = 0;       // расхождение часов телевизора и сервера
+var splitRows = false;  // хватает ли высоты строки на подгруппы в две строки
 
 function serverNow() { return Date.now() + skew; }
 
@@ -206,14 +213,20 @@ function roomHtml(where) {
 }
 
 /* Кто ведёт: в файле группы это преподаватель, в файле преподавателя —
-   группа, то есть всегда «вторая сторона» занятия. Одно и то же имя на
-   все подгруппы пишется один раз без номера: повторять фамилию незачем.
-   Когда имена разные, номер связывает имя слева с кабинетом справа. */
-function whoHtml(variants) {
+   группа, то есть всегда «вторая сторона» занятия. */
+function whoNames(variants) {
   var names = [];
   variants.forEach(function (v) {
     if (v.who && names.indexOf(v.who) < 0) names.push(v.who);
   });
+  return names;
+}
+
+/* Одно и то же имя на все подгруппы пишется один раз без номера: повторять
+   фамилию незачем. Когда имена разные, номер связывает имя слева с
+   кабинетом справа. */
+function whoHtml(variants) {
+  var names = whoNames(variants);
   if (!names.length) return '';
   if (names.length === 1) return esc(names[0]);
   return variants.map(function (v, i) {
@@ -221,21 +234,47 @@ function whoHtml(variants) {
   }).filter(Boolean).join(' · ');
 }
 
+function metaHtml(who, room) {
+  return '<span class="meta"><span class="who">' + who + '</span>' +
+    '<span class="room">' + room + '</span></span>';
+}
+
+/* Две подгруппы с разными преподавателями разворачиваются на две строки —
+   по строке на подгруппу. В одной строке на четыре части (два имени и два
+   кабинета) ширины колонки не хватало: имена ужимались до одной буквы.
+   Своя строка даёт каждому имени вдвое больше места, а номер подгруппы
+   становится не нужен — имя и кабинет связывает сама строка.
+
+   Условий три, и каждое отсекает случай, где разворот не помог бы:
+   низкая строка (три линии вышли бы нечитаемо мелкими), больше двух
+   подгрупп (четыре линии в строку уже не влезут) и один и тот же
+   преподаватель на обе подгруппы (его имя и так пишется один раз). */
+function splitVariants(lesson) {
+  return splitRows && lesson.variants.length === 2 &&
+         whoNames(lesson.variants).length === 2;
+}
+
 function cellHtml(lesson, key, band) {
   band = band || '';
   if (!lesson) return '<div class="cell cell--empty' + band + '" data-k="' + key + '"></div>';
-  var rooms = lesson.variants.map(function (v, i) {
-    if (!v.room) return '';
-    return lesson.variants.length > 1
-      ? '<i>' + (i + 1) + '</i>\u00a0' + roomHtml(v.room) : roomHtml(v.room);
-  }).filter(Boolean).join(' · ');
-  var who = whoHtml(lesson.variants);
-  return '<div class="cell' + band + '" data-k="' + key + '">' +
-    '<span class="subject">' + esc(lesson.subject) + '</span>' +
-    (who || rooms
-      ? '<span class="meta"><span class="who">' + who + '</span>' +
-        '<span class="room">' + rooms + '</span></span>'
-      : '') + '</div>';
+
+  var split = splitVariants(lesson), body;
+  if (split) {
+    body = lesson.variants.map(function (v) {
+      return metaHtml(esc(v.who), v.room ? roomHtml(v.room) : '');
+    }).join('');
+  } else {
+    var rooms = lesson.variants.map(function (v, i) {
+      if (!v.room) return '';
+      return lesson.variants.length > 1
+        ? '<i>' + (i + 1) + '</i>\u00a0' + roomHtml(v.room) : roomHtml(v.room);
+    }).filter(Boolean).join(' · ');
+    var who = whoHtml(lesson.variants);
+    body = who || rooms ? metaHtml(who, rooms) : '';
+  }
+  return '<div class="cell' + (split ? ' cell--split' : '') + band +
+    '" data-k="' + key + '">' +
+    '<span class="subject">' + esc(lesson.subject) + '</span>' + body + '</div>';
 }
 
 /* Телевизор отводит странице «безопасную зону» под оверскан — на 3072
@@ -378,6 +417,9 @@ function draw() {
   var widths = [];
   for (var wi = 0; wi < per; wi++) widths.push(base + (wi < extra ? unit : 0));
 
+  /* Решаем до сборки разметки: cellHtml смотрит на этот флаг. */
+  splitRows = rowH >= num('split', SPLIT_MIN_ROW_PX);
+
   els.board.style.setProperty('--rh', rowH + 'px');
   els.board.style.setProperty('--snap', dpr);
   els.board.style.setProperty('--dayw', dayW + 'px');
@@ -483,7 +525,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 17;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 18;   /* поднимайте вместе с ?v= в tv.html */
 
 function refresh() {
   loadAll().then(function (failed) {
