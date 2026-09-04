@@ -286,8 +286,10 @@ function cellHtml(lesson, key, band) {
    В одной строке на четыре части (два имени и два кабинета) ширины колонки
    обычно не хватает: имена ужимаются до одной буквы. Своя строка даёт
    каждому имени вдвое больше места, а номер подгруппы становится не нужен —
-   имя и кабинет связывает сама строка. Третья линия берётся из кегля,
-   он в развёрнутой ячейке меньше (см. .cell--split в tv.css).
+   имя и кабинет связывает сама строка. Кегль при этом не меняется: третью
+   линию даёт высота — строка полосы растёт вверх от --rh (см. grid-auto-rows
+   у .band). Растёт она у всех групп разом, дорожка в сетке одна, а
+   отыгрывается это высотой прочих строк.
 
    Разворачиваем не всё подряд, а только те ячейки, где имена в одну строку
    и правда не поместились. Ширина колонки известна лишь после отрисовки,
@@ -302,9 +304,10 @@ function cellHtml(lesson, key, band) {
 function splitTight() {
   var rh = parseFloat(els.board.style.getPropertyValue('--rh')) || 0;
   var dpr = window.devicePixelRatio || 1;
-  if (rh * dpr < num('split', SPLIT_MIN_ROW_PX)) return;
+  if (rh * dpr < num('split', SPLIT_MIN_ROW_PX)) return false;
 
   var cells = els.board.querySelectorAll('.cell[data-split]');
+  var done = 0;
   for (var i = 0; i < cells.length; i++) {
     var cell = cells[i];
     var who = cell.querySelector('.who');
@@ -313,7 +316,9 @@ function splitTight() {
     cell.classList.add('cell--split');
     cell.innerHTML = '<span class="subject">' + esc(lesson.subject) + '</span>' +
       splitBody(lesson);
+    done++;
   }
+  return done > 0;
 }
 
 /* Телевизор отводит странице «безопасную зону» под оверскан — на 3072
@@ -518,7 +523,11 @@ function draw() {
 
   els.board.innerHTML = html;
   fit(totalRows);
-  splitTight();
+  /* Разворот делает свои строки выше, и таблица перестаёт совпадать с
+     экраном, — поэтому подгонку повторяем. Порядок именно такой: первый
+     fit() даёт тот кегль, по которому и видно, какие имена не поместились,
+     а второй укладывает таблицу заново, уже с высокими строками. */
+  if (splitTight()) fit(totalRows);
 
   /* Подсветка идущей пары отключена. Чтобы вернуть: найти строку, у которой
      serverNow() попадает между r.from и r.to, и повесить класс now на все
@@ -563,7 +572,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 20;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 21;   /* поднимайте вместе с ?v= в tv.html */
 
 /* Версия — в заголовок вкладки. На телевизоре его не видно (табло идёт во
    весь экран), зато в обычном браузере сразу ясно, какие файлы загружены:
