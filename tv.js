@@ -483,7 +483,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 16;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 17;   /* поднимайте вместе с ?v= в tv.html */
 
 function refresh() {
   loadAll().then(function (failed) {
