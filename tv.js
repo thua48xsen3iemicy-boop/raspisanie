@@ -28,22 +28,25 @@ function num(name, def) {
   var m = new RegExp('[?&]' + name + '=(\\d+)').exec(qs);
   return m ? +m[1] : def;
 }
+function has(name) { return new RegExp('[?&]' + name + '=').test(qs); }
 /* Безопасное поле по краям экрана. Телевизоры в обычном режиме картинки
    подрезают края (оверскан) — до нескольких процентов с каждой стороны,
    и крайняя колонка уходит за рамку матрицы. Правильное лечение —
    включить в телевизоре режим «точка в точку», но он есть не везде,
    поэтому поле задаётся здесь.
 
-   Сверху и снизу — в процентах от высоты экрана: tv.html?safe=4
-   Слева и справа — в пикселях: tv.html?safex=24. По бокам таблица шире
-   всего выигрывает от каждого отвоёванного пикселя, а процент на широком
-   экране съедал сразу десятки — потому здесь пиксели и всего десяток.
-   Если оверскан режет и бока, достаточно задать один ?safe=: тогда поле
-   по бокам снова считается процентом, как сверху и снизу. */
+   Снизу — процентом от высоты экрана: tv.html?safe=4
+   Сверху и по бокам — в пикселях: tv.html?safetop=32, tv.html?safex=24.
+   Там процент оказался расточителен: на широком экране он съедал сразу
+   десятки пикселей, а таблица выигрывает от каждого отвоёванного. Сверху
+   поля нет вовсе — шапка идёт от самого края.
+
+   ?safe= остаётся общим лекарством от оверскана: если он задан, а своего
+   значения у стороны нет, эта сторона тоже считается процентом. */
 var SAFE_PCT = num('safe', 3);
+var SAFE_TOP_PX = num('safetop', 0);
 var SAFE_X_PX = num('safex', 10);
-var SAFE_SET = /[?&]safe=/.test(qs);
-var SAFE_X_SET = /[?&]safex=/.test(qs);
+function safeSide(name, px, pct) { return (has('safe') && !has(name)) ? pct : px; }
 var BLEED_X = num('bleed', 0);         // tv.html?bleed=92 — вылезти за края по бокам
 var BLEED_Y = num('bleedy', 0);        // tv.html?bleedy=48 — то же сверху и снизу
 var FORCED_PER = num('groups', 0);     // tv.html?groups=8 — групп в полосе
@@ -279,10 +282,12 @@ function draw() {
 
   /* Поле отдаём странице целиком, а не таблице: под обрез иначе попадали бы
      и часы, и герб. Ставим до замеров — иначе посчитаем по старым размерам. */
-  var safeX = (SAFE_SET && !SAFE_X_SET)
-    ? window.innerWidth * SAFE_PCT / 100 : SAFE_X_PX;
+  var pctY = window.innerHeight * SAFE_PCT / 100;
+  var pctX = window.innerWidth * SAFE_PCT / 100;
   document.body.style.padding =
-    snap(window.innerHeight * SAFE_PCT / 100) + 'px ' + snap(safeX) + 'px';
+    snap(safeSide('safetop', SAFE_TOP_PX, pctY)) + 'px ' +
+    snap(safeSide('safex', SAFE_X_PX, pctX)) + 'px ' +
+    snap(pctY) + 'px';
 
   var vh = window.innerHeight / 100;
   if (els.bar) els.bar.style.height = snap(vh * 5.6) + 'px';
@@ -458,7 +463,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 13;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 14;   /* поднимайте вместе с ?v= в tv.html */
 
 function refresh() {
   loadAll().then(function (failed) {
