@@ -131,13 +131,13 @@ body{
 .head{
   background:var(--panel);
   display:flex;align-items:center;justify-content:center;
-  font-weight:700;font-size:calc(var(--rh) * .52);
+  font-weight:700;font-size:calc(var(--rh) * .57);
   padding:calc(var(--rh) * .12) .25em;min-width:0;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis
 }
 .head--corner{
   grid-column:1/3;font-family:var(--mono);
-  font-size:calc(var(--rh) * .40);color:var(--ink-2)
+  font-size:calc(var(--rh) * .44);color:var(--ink-2)
 }
 .head--group{font-family:var(--mono);letter-spacing:.01em}
 
@@ -146,7 +146,7 @@ body{
   grid-column:1;background:var(--panel);
   display:flex;align-items:center;justify-content:center;
   writing-mode:vertical-rl;transform:rotate(180deg);
-  font-weight:700;font-size:calc(var(--rh) * .52);letter-spacing:.04em;
+  font-weight:700;font-size:calc(var(--rh) * .57);letter-spacing:.04em;
   white-space:nowrap;overflow:hidden
 }
 
@@ -161,11 +161,11 @@ body{
   font-variant-numeric:tabular-nums
 }
 .slot__no{
-  font-size:calc(var(--rh) * .52);font-weight:700;
+  font-size:calc(var(--rh) * .57);font-weight:700;
   text-align:right;line-height:1
 }
 .slot__time{
-  font-size:calc(var(--rh) * .38);color:var(--ink-2);
+  font-size:calc(var(--rh) * .41);color:var(--ink-2);
   text-align:left;line-height:1
 }
 
@@ -178,14 +178,16 @@ body{
   padding:0 calc(var(--rh) * .16);
   display:flex;flex-direction:column;justify-content:center;
   /* Кегль обеих строк ячейки отмерен от высоты строки, и вместе с
-     межстрочным они обязаны в неё уложиться: (.49 + .38) * 1.05 = 0.91
-     от --rh, десятая часть остаётся в запас. Поднимая один из размеров,
-     держите сумму ниже единицы — иначе строка обрежется по низу, а
-     подогнать высоту нечем: её задаёт grid-auto-rows. */
+     межстрочным они выбирают её целиком: (.54 + .41) * 1.05 = 1.00.
+     Запас здесь больше не нужен: строке разрешено расти по содержимому
+     (см. grid-auto-rows у .band), так что перебор кегля не обрежет текст,
+     а лишь поднимет строку — и fit() пересчитает --rh. Но и польза от
+     перебора нулевая: fit() отнимет ровно столько, сколько прибавил
+     множитель. Единица — точка, где строка занята полностью. */
   line-height:1.05
 }
 .subject{
-  font-size:calc(var(--rh) * .49);font-weight:600;
+  font-size:calc(var(--rh) * .54);font-weight:600;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis
 }
 /* Вторая строка ячейки: кто ведёт — слева, где идёт — справа.
@@ -195,7 +197,7 @@ body{
    убрано — оно само съедало место. */
 .meta{
   display:flex;align-items:baseline;gap:.5em;
-  font-size:calc(var(--rh) * .38);
+  font-size:calc(var(--rh) * .41);
   white-space:nowrap;overflow:hidden;min-width:0
 }
 /* Имя обычным шрифтом, а не моноширинным: фамилия — слово, а не число,

@@ -51,16 +51,16 @@ function has(name) { return new RegExp('[?&]' + name + '=').test(qs); }
    включить в телевизоре режим «точка в точку», но он есть не везде,
    поэтому поле задаётся здесь.
 
-   Снизу — процентом от высоты экрана: tv.html?safe=4
-   Сверху и по бокам — в пикселях: tv.html?safetop=32, tv.html?safex=24.
-   Там процент оказался расточителен: на широком экране он съедал сразу
-   десятки пикселей, а таблица выигрывает от каждого отвоёванного. Сверху
-   поля нет вовсе — шапка идёт от самого края.
+   Все четыре поля заданы в пикселях: tv.html?safetop=32, ?safex=24,
+   ?safebot=32. Процент оказался расточителен — на большом экране он съедал
+   сразу десятки пикселей, а таблица выигрывает от каждого отвоёванного.
+   Сверху поля нет вовсе: шапка идёт от самого края.
 
    ?safe= остаётся общим лекарством от оверскана: если он задан, а своего
-   значения у стороны нет, эта сторона тоже считается процентом. */
+   значения у стороны нет, эта сторона считается процентом от экрана. */
 var SAFE_PCT = num('safe', 3);
 var SAFE_TOP_PX = num('safetop', 0);
+var SAFE_BOT_PX = num('safebot', 10);
 var SAFE_X_PX = num('safex', 10);
 function safeSide(name, px, pct) { return (has('safe') && !has(name)) ? pct : px; }
 var BLEED_X = num('bleed', 0);         // tv.html?bleed=92 — вылезти за края по бокам
@@ -390,7 +390,7 @@ function draw() {
   document.body.style.padding =
     snap(safeSide('safetop', SAFE_TOP_PX, pctY)) + 'px ' +
     snap(safeSide('safex', SAFE_X_PX, pctX)) + 'px ' +
-    snap(pctY) + 'px';
+    snap(safeSide('safebot', SAFE_BOT_PX, pctY)) + 'px';
 
   var vh = window.innerHeight / 100;
   if (els.bar) els.bar.style.height = snap(vh * 5.6) + 'px';
@@ -572,7 +572,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 21;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 22;   /* поднимайте вместе с ?v= в tv.html */
 
 /* Версия — в заголовок вкладки. На телевизоре его не видно (табло идёт во
    весь экран), зато в обычном браузере сразу ясно, какие файлы загружены:
