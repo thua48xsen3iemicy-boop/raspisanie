@@ -211,6 +211,13 @@ body{
 .room .pre{flex:0 1 auto;min-width:0;overflow:hidden;color:var(--ink-2)}
 .room b{flex:none;font-weight:700}
 .meta i{font-style:normal;font-weight:700;color:var(--accent)}
+/* Занятие по подгруппам, развёрнутое на две строки: три текстовые линии
+   вместо двух должны уложиться в ту же высоту строки, и кегль здесь
+   меньше — (.38 + .24 + .24) * 1.05 = 0.90 от --rh, тот же запас, что и у
+   обычной ячейки. Разворачивает строки tv.js и только когда строка
+   достаточно высока, см. SPLIT_MIN_ROW_PX. */
+.cell--split .subject{font-size:calc(var(--rh) * .38)}
+.cell--split .meta{font-size:calc(var(--rh) * .24)}
 .cell--empty{background:var(--row)}
 
 /* добивка до полной ширины в неполной полосе */
