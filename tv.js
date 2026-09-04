@@ -17,21 +17,22 @@ var GOOD_COL_PX = 150;     // ширина колонки группы, при �
 var GOOD_ROW_PX = 30;      // высота строки, при которой читается легко
 var PAD_X = 0;             // поле таблицы от боков экрана, пикселей
 var BAR_PAD_X = 10;        // поле шапки и нижней полосы
-/* Ниже этой высоты строки занятие по подгруппам не разворачивается на две
-   строки: три текстовые линии вместо двух вышли бы мельче десяти пикселей,
-   и подгруппы остаются в одну строку с номерами.
+/* Нижняя граница, ниже которой занятие по подгруппам не разворачивается
+   на две строки: три текстовые линии вместо двух вышли бы совсем мелкими,
+   и подгруппы остаются в одну строку с номерами. Это именно предохранитель
+   на крайний случай — разворачивать или нет, решает не он, а замер по
+   факту, см. splitTight().
 
    Высота здесь в ФИЗИЧЕСКИХ пикселях, как и всё прочее в этом файле, и
    это принципиально. Строка всегда занимает свою долю экрана — высоту
-   делят 37 строк, — поэтому в CSS-пикселях её высота говорит лишь о
-   масштабе системы: на одной и той же 4K-панели она равна 48 при 100%
-   и 23 при 200%, хотя физически это одни и те же 46-48 пикселей и один
-   и тот же размер на экране. Порог же стережёт другое — чтобы буквы не
+   делят строки всех дней, — поэтому в CSS-пикселях её высота говорит лишь
+   о масштабе системы: на одной и той же 4K-панели она равна 48 при 100%
+   и 23 при 200%, хотя физически это одни и те же 46-48 пикселей и один и
+   тот же размер на экране. Граница же стережёт другое — чтобы буквы не
    расплылись из-за нехватки пикселей под них, а это как раз физическое
-   разрешение. Порог сдвигается из адреса — tv.html?split=30, — чтобы
-   посмотреть на своём экране, где проходит граница читаемости;
-   0 разворачивает всегда. */
-var SPLIT_MIN_ROW_PX = 42;
+   разрешение. Сдвигается из адреса: tv.html?split=40 запретит разворот на
+   низкой строке, 0 разрешит его на любой. */
+var SPLIT_MIN_ROW_PX = 24;
 
 /* Табло лежит в своём каталоге, расписания — уровнем выше.
    Если разложите иначе, поправьте только эти два пути. */
@@ -81,7 +82,7 @@ var els = {
 var groups = [];    // [{title, at: {'дата/пара': урок}}]
 var view = null;    // {rows, days, from, to}
 var skew = 0;       // расхождение часов телевизора и сервера
-var splitRows = false;  // хватает ли высоты строки на подгруппы в две строки
+var splitPending = [];  // занятия-кандидаты на разворот, по номеру в data-split
 
 function serverNow() { return Date.now() + skew; }
 
@@ -248,42 +249,71 @@ function metaHtml(who, room) {
     '<span class="room">' + room + '</span></span>';
 }
 
-/* Две подгруппы с разными преподавателями разворачиваются на две строки —
-   по строке на подгруппу. В одной строке на четыре части (два имени и два
-   кабинета) ширины колонки не хватало: имена ужимались до одной буквы.
-   Своя строка даёт каждому имени вдвое больше места, а номер подгруппы
-   становится не нужен — имя и кабинет связывает сама строка.
+/* Занятие, которое имеет смысл разворачивать на две строки: ровно две
+   подгруппы у разных преподавателей. Три подгруппы отпадают — четыре
+   текстовые линии в строку уже не влезут; один и тот же преподаватель на
+   обе подгруппы тоже — его имя и так пишется один раз, без обрезки. */
+function splitWorthy(lesson) {
+  return lesson.variants.length === 2 && whoNames(lesson.variants).length === 2;
+}
 
-   Условий три, и каждое отсекает случай, где разворот не помог бы:
-   низкая строка (три линии вышли бы нечитаемо мелкими), больше двух
-   подгрупп (четыре линии в строку уже не влезут) и один и тот же
-   преподаватель на обе подгруппы (его имя и так пишется один раз). */
-function splitVariants(lesson) {
-  return splitRows && lesson.variants.length === 2 &&
-         whoNames(lesson.variants).length === 2;
+function splitBody(lesson) {
+  return lesson.variants.map(function (v) {
+    return metaHtml(esc(v.who), v.room ? roomHtml(v.room) : '');
+  }).join('');
 }
 
 function cellHtml(lesson, key, band) {
   band = band || '';
   if (!lesson) return '<div class="cell cell--empty' + band + '" data-k="' + key + '"></div>';
 
-  var split = splitVariants(lesson), body;
-  if (split) {
-    body = lesson.variants.map(function (v) {
-      return metaHtml(esc(v.who), v.room ? roomHtml(v.room) : '');
-    }).join('');
-  } else {
-    var rooms = lesson.variants.map(function (v, i) {
-      if (!v.room) return '';
-      return lesson.variants.length > 1
-        ? '<i>' + (i + 1) + '</i>\u00a0' + roomHtml(v.room) : roomHtml(v.room);
-    }).filter(Boolean).join(' · ');
-    var who = whoHtml(lesson.variants);
-    body = who || rooms ? metaHtml(who, rooms) : '';
+  /* Кандидаты помечаются номером, а разворачиваются потом, в splitTight():
+     помещаются имена в одну строку или нет, видно только после отрисовки. */
+  var mark = splitWorthy(lesson)
+    ? ' data-split="' + (splitPending.push(lesson) - 1) + '"' : '';
+  var rooms = lesson.variants.map(function (v, i) {
+    if (!v.room) return '';
+    return lesson.variants.length > 1
+      ? '<i>' + (i + 1) + '</i>\u00a0' + roomHtml(v.room) : roomHtml(v.room);
+  }).filter(Boolean).join(' · ');
+  var who = whoHtml(lesson.variants);
+  return '<div class="cell' + band + '" data-k="' + key + '"' + mark + '>' +
+    '<span class="subject">' + esc(lesson.subject) + '</span>' +
+    (who || rooms ? metaHtml(who, rooms) : '') + '</div>';
+}
+
+/* Разворот занятия по подгруппам на две строки — по строке на подгруппу.
+   В одной строке на четыре части (два имени и два кабинета) ширины колонки
+   обычно не хватает: имена ужимаются до одной буквы. Своя строка даёт
+   каждому имени вдвое больше места, а номер подгруппы становится не нужен —
+   имя и кабинет связывает сама строка. Третья линия берётся из кегля,
+   он в развёрнутой ячейке меньше (см. .cell--split в tv.css).
+
+   Разворачиваем не всё подряд, а только те ячейки, где имена в одну строку
+   и правда не поместились. Ширина колонки известна лишь после отрисовки,
+   поэтому это второй проход: где имена целы, ячейка остаётся с крупным
+   кеглем. Высоту строки трогать не нужно — её держит grid-auto-rows,
+   и перемерять раскладку после этого не приходится.
+
+   Здесь же и нижняя граница по высоте строки: сюда мы попадаем после
+   fit(), то есть высота уже настоящая, а не расчётная. Проверять её до
+   отрисовки было бы неверно — fit() правит высоту на несколько процентов,
+   и у самой границы решение разошлось бы с тем, что видно на экране. */
+function splitTight() {
+  var rh = parseFloat(els.board.style.getPropertyValue('--rh')) || 0;
+  var dpr = window.devicePixelRatio || 1;
+  if (rh * dpr < num('split', SPLIT_MIN_ROW_PX)) return;
+
+  var cells = els.board.querySelectorAll('.cell[data-split]');
+  for (var i = 0; i < cells.length; i++) {
+    var cell = cells[i];
+    var who = cell.querySelector('.who');
+    if (!who || who.scrollWidth <= who.clientWidth + 1) continue;
+    var lesson = splitPending[+cell.getAttribute('data-split')];
+    cell.classList.add('cell--split');
+    cell.innerHTML = '<span class="subject">' + esc(lesson.subject) + '</span>' +
+      splitBody(lesson);
   }
-  return '<div class="cell' + (split ? ' cell--split' : '') + band +
-    '" data-k="' + key + '">' +
-    '<span class="subject">' + esc(lesson.subject) + '</span>' + body + '</div>';
 }
 
 /* Телевизор отводит странице «безопасную зону» под оверскан — на 3072
@@ -426,10 +456,6 @@ function draw() {
   var widths = [];
   for (var wi = 0; wi < per; wi++) widths.push(base + (wi < extra ? unit : 0));
 
-  /* Решаем до сборки разметки: cellHtml смотрит на этот флаг. rowH задана
-     в CSS-пикселях, порог — в физических, потому и умножаем на dpr. */
-  splitRows = rowH * dpr >= num('split', SPLIT_MIN_ROW_PX);
-
   els.board.style.setProperty('--rh', rowH + 'px');
   els.board.style.setProperty('--snap', dpr);
   els.board.style.setProperty('--dayw', dayW + 'px');
@@ -443,6 +469,7 @@ function draw() {
   var today = dmy(serverNow());
 
   var html = '';
+  splitPending = [];
   for (var b = 0; b < bands; b++) {
     var slice = groups.slice(b * per, (b + 1) * per);
     if (!slice.length) continue;
@@ -491,6 +518,7 @@ function draw() {
 
   els.board.innerHTML = html;
   fit(totalRows);
+  splitTight();
 
   /* Подсветка идущей пары отключена. Чтобы вернуть: найти строку, у которой
      serverNow() попадает между r.from и r.to, и повесить класс now на все
@@ -535,7 +563,12 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 19;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 20;   /* поднимайте вместе с ?v= в tv.html */
+
+/* Версия — в заголовок вкладки. На телевизоре его не видно (табло идёт во
+   весь экран), зато в обычном браузере сразу ясно, какие файлы загружены:
+   иначе «правка не подействовала» и «правка не доехала» выглядят одинаково. */
+document.title = 'Расписание на неделю · v' + VERSION;
 
 function refresh() {
   loadAll().then(function (failed) {
