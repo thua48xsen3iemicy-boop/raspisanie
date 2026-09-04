@@ -5,7 +5,7 @@
 
 :root{
   --bg:#ffffff;
-  --panel:#eef1f6;      /* левые колонки и шапка */
+  --panel:#eef1f6;      /* левые колонки таблицы и её шапка */
   --row:#ffffff;        /* ячейка занятия */
   --dim:#f5f7fa;        /* фон чётных дней */
   --ink:#0f1622;
@@ -56,7 +56,9 @@ body{
   /* высоту в целых пикселях выставляет tv.js, здесь — запасное значение */
   flex:none;height:5.6vh;box-sizing:border-box;
   display:flex;align-items:center;gap:1.6vw;
-  padding:0 var(--barpadx);background:var(--panel);
+  /* фон страницы, а не серый заливкой: полоса читается как поле листа,
+     от таблицы её отделяет черта снизу */
+  padding:0 var(--barpadx);background:var(--bg);
   border-bottom:var(--hair) solid var(--sep)
 }
 .bar__left{display:flex;align-items:center;gap:.9vw;min-width:0}
@@ -88,7 +90,7 @@ body{
    таблица считает свободное пространство сама и в эту полосу не залезет. */
 .ticker{
   /* высоту в целых пикселях выставляет tv.js, здесь — запасное значение */
-  flex:none;height:6vh;box-sizing:border-box;background:var(--panel);
+  flex:none;height:6vh;box-sizing:border-box;background:var(--bg);
   padding:0 var(--barpadx);border-top:var(--hair) solid var(--sep);
   display:flex;align-items:center;overflow:hidden
 }
