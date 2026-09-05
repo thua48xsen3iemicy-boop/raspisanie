@@ -637,11 +637,18 @@ function shrink(sel, name, max, min, tight) {
   }
 }
 
-/* Обычная надпись в одну строку: не влезает — значит по ширине.
+/* Обычная надпись в одну строку: не влезает — значит по ширине. Меряем
+   саму надпись, а не переполнение ячейки: переполнение видно только с той
+   стороны, куда надпись выключена, а время выключено вправо и вылезает
+   влево — scrollWidth там равен clientWidth, и нехватка места осталась бы
+   незамеченной. Диапазон же меряет строку целиком, как бы она ни стояла.
    Запас в пиксель — на округление: браузер меряет ширину дробно, и целое
-   scrollWidth у надписи впритык бывает на пиксель больше clientWidth. */
+   clientWidth у надписи впритык бывает на пиксель меньше её ширины. */
 function tightText(el) {
-  return el.scrollWidth > el.clientWidth + 1 ? el.clientWidth / el.scrollWidth : 1;
+  var range = document.createRange();
+  range.selectNodeContents(el);
+  var w = range.getBoundingClientRect().width;
+  return w > el.clientWidth + 1 ? el.clientWidth / w : 1;
 }
 
 /* Повёрнутая надпись дня. Меряем не переполнение ячейки, а саму надпись:
@@ -673,7 +680,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 26;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 27;   /* поднимайте вместе с ?v= в tv.html */
 
 /* Версия — в заголовок вкладки. На телевизоре его не видно (табло идёт во
    весь экран), зато в обычном браузере сразу ясно, какие файлы загружены:
