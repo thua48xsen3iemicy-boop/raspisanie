@@ -551,7 +551,8 @@ function draw() {
         '<span class="slot__no">' + esc(r.num) + '</span>' +
         '<span class="slot__time">' + esc(r.start) + '</span></div>';
 
-      slice.forEach(function (g) { html += cellHtml(g.at[key], key, band); });
+      var cellBand = band + (isToday ? ' cell--today' : '');
+      slice.forEach(function (g) { html += cellHtml(g.at[key], key, cellBand); });
       for (var q = 0; q < padCount; q++) {
         html += '<div class="cell cell--pad' + band + '"></div>';
       }
@@ -680,7 +681,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 27;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 28;   /* поднимайте вместе с ?v= в tv.html */
 
 /* Версия — в заголовок вкладки. На телевизоре его не видно (табло идёт во
    весь экран), зато в обычном браузере сразу ясно, какие файлы загружены:
