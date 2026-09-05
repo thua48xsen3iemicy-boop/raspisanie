@@ -18,6 +18,12 @@
   --now-rgb:255,207,51;
   /* поля страницы, толщину линий и ширину левых колонок задаёт tv.js
      по сетке физических пикселей; здесь — запасные значения */
+  /* сегодняшний день — не заливка поверх строки, а свои цвета фона:
+     полупрозрачным нельзя, под ячейкой лежит фон полосы, то есть цвет
+     сетки, и он просвечивал бы серым */
+  --today:#eef1fd;--today-dim:#e8ecfb;
+  /* штриховка пустой пары: не «не загрузилось», а «занятия нет» */
+  --hatch:rgba(15,22,34,.06);
   --hair:1px;--padx:0px;--barpadx:10px;--pady:4px;--bandgap:8px;--dayw:34px;--pairw:64px;
   --mono:ui-monospace,"SFMono-Regular","Cascadia Mono","Roboto Mono",Consolas,monospace;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
@@ -26,6 +32,7 @@
 :root[data-tv=dark]{
   --bg:#0e1219;--panel:#1b2230;--row:#141a24;--dim:#181f2b;
   --ink:#f2f5fa;--ink-2:#93a1b5;--line:#2a3341;--sep:#4a596d;--accent:#7b8dff;--accent-rgb:123,141,255;
+  --today:#1b2334;--today-dim:#202a3c;--hatch:rgba(242,245,250,.04);
 }
 
 *{box-sizing:border-box}
@@ -126,6 +133,11 @@ body{
   max-width:100%;
   display:grid;gap:var(--hair);background:var(--line);
   border:var(--hair) solid var(--line);margin-bottom:var(--bandgap);
+  /* Углы скруглены, и вместе с ними обрезаны углы крайних ячеек — полоса
+     читается как цельный лист, а не как обрывок сетки. Ни на высоту
+     строки, ни на ширину колонок это не влияет: обрезка идёт поверх
+     готовой раскладки. Радиус от высоты строки, как и всё здесь. */
+  border-radius:calc(var(--rh) * .1);overflow:hidden;
   /* Высота строки задана явно, иначе строки росли бы по содержимому и внизу
      экрана оставалась бы незанятая полоса. Но расти вверх от этой высоты
      строке позволено: занятие по подгруппам разворачивается на три текстовые
@@ -144,6 +156,14 @@ body{
   font-weight:700;font-size:calc(var(--rh) * .57);
   padding:calc(var(--rh) * .12) .25em;min-width:0;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+/* Черта под шапкой — тенью внутрь, а не рамкой: рамка вошла бы в высоту
+   ячейки, подняла бы строку шапки и отняла бы эту высоту у всей таблицы
+   (см. grid-auto-rows у .band). Тень же рисуется поверх готовой ячейки.
+   Синим, а не серым: это единственная линия в таблице, которая не делит,
+   а отделяет — за ней начинается расписание. */
+.head--corner,.head--group{
+  box-shadow:inset 0 calc(var(--rh) * -.06) 0 rgba(var(--accent-rgb), .5)
 }
 .head--corner{
   grid-column:1/3;font-family:var(--mono);
@@ -282,7 +302,19 @@ body{
 .room .pre{flex:0 1 auto;min-width:0;overflow:hidden;color:var(--ink-2)}
 .room b{flex:none;font-weight:700}
 .meta i{font-style:normal;font-weight:700;color:var(--accent)}
-.cell--empty{background:var(--row)}
+/* Пустая пара. Пустой белый прямоугольник читается как «не загрузилось»;
+   бледная штриховка — как «занятия нет».
+
+   Цвет фона и штриховка заданы порознь, и селектор у штриховки взят
+   с запасом по весу. Иначе её сбрасывало чередование дней: .dim задаёт
+   фон сокращением, а сокращение обнуляет и картинку — в чётных днях
+   пустая пара оставалась просто серой. */
+.cell--empty{background-color:var(--row)}
+.cell.cell--empty{
+  background-image:repeating-linear-gradient(-45deg,
+    transparent 0 calc(var(--rh) * .22),
+    var(--hatch) calc(var(--rh) * .22) calc(var(--rh) * .30))
+}
 
 /* добивка до полной ширины в неполной полосе */
 .head--pad,.cell--pad{background:var(--bg)}
@@ -291,7 +323,7 @@ body{
    Чётные дни идут другим фоном — этого хватает, чтобы глаз видел границу
    без дополнительных линий. */
 .dim{background:var(--dim)}
-.dim.cell--empty{background:var(--dim)}
+.dim.cell--empty{background-color:var(--dim)}
 
 /* Сегодняшний день. Правило должно идти ПОСЛЕ чередования и быть не слабее
    по селектору: иначе в затенённый день .dim перебивал заливку, буквы
@@ -299,6 +331,11 @@ body{
 .day.day--today{background:var(--accent);color:#fff}
 /* номер пары в сегодняшнем дне — тем же синим, но только текстом */
 .slot.slot--today .slot__no{color:var(--accent)}
+/* Занятия сегодняшнего дня — на чуть голубоватом фоне. Оттенок взят
+   такой, чтобы издалека день читался единым блоком, а вблизи разница
+   с белым не спорила с текстом: буквы остаются чёрными по светлому. */
+.cell.cell--today,.slot.slot--today{background-color:var(--today)}
+.cell.cell--today.dim,.slot.slot--today.dim{background-color:var(--today-dim)}
 
 /* Подсветка идущей пары отключена. Правила лежали здесь: фон
    rgba(var(--now-rgb),.45) на ячейках строки и .75 на номере пары. */
