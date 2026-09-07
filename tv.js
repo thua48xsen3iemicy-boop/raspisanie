@@ -87,8 +87,11 @@ var TIME_MIN = 0.41;
 var GROUPS_DIR = '../s/';
 var LIST_URL = '../list.txt';
 /* Объявления лежат там же, где список групп: каталог табло — это код,
-   а содержимое живёт уровнем выше. Формат файла описан в parse.js. */
-var TICKER_URL = '../ticker.txt';
+   а содержимое живёт уровнем выше. Формат файла описан в parse.js.
+   Второй адрес — на случай, если файл положили не туда: рядом с list.txt
+   его место, но каталог табло — первое, куда его кладут по ошибке, и
+   ловить эту ошибку глазами по пустой полосе внизу экрана невесело. */
+var TICKER_URLS = ['../ticker.txt', 'ticker.txt'];
 
 var qs = location.search;
 function num(name, def) {
@@ -138,6 +141,7 @@ var skew = 0;       // расхождение часов телевизора и
 var splitPending = [];  // занятия-кандидаты на разворот, по номеру в data-split
 var rebasePending = qs.indexOf('rebase') >= 0;   // ?rebase — один раз за загрузку
 var ticker = [];    // объявления из ticker.txt, вместе со сроками показа
+var tickerHint = '';// подсказка вместо ленты, если файл нашёлся, а объявлений в нём нет
 var tickerSig = ''; // что сейчас набрано в ленте — чтобы не пересобирать зря
 
 function serverNow() { return Date.now() + skew; }
@@ -196,17 +200,25 @@ function loadAll() {
 
 /* ── Бегущая строка ─────────────────────────────────────── */
 
+/* Файла может не быть вовсе, и это не поломка, а «объявлений нет»:
+   бегущая строка нужна не каждому холлу. Поэтому ненайденный ticker.txt
+   не выносится ни в шапку, ни на полосу — иначе на табло, где объявлений
+   не заводили, каждый день висело бы сообщение об ошибке.
+   А вот файл, который нашёлся, но оказался пуст, — совсем другое дело:
+   его кто-то завёл, чего-то ждёт, и молчать тут нельзя. */
+var TICKER_EMPTY = 'Файл объявлений найден, но пуст: строки, начинающиеся с #, — это комментарии';
+
 function loadTicker() {
   if (NO_TICKER) return Promise.resolve();
-  return get(TICKER_URL).then(function (text) {
-    ticker = parseTicker(text, serverNow());
-  }).catch(function () {
-    /* Файла может не быть вовсе, и это не поломка, а «объявлений нет».
-       В шапку такое не выносим: надпись там отведена под расписания,
-       и сообщение о ненайденном ticker.txt висело бы на табло каждый день
-       у тех, кто бегущей строкой не пользуется. */
-    ticker = [];
-  }).then(drawTicker);
+  var i = 0;
+  function tryNext() {
+    if (i >= TICKER_URLS.length) { ticker = []; tickerHint = ''; return; }
+    return get(TICKER_URLS[i++]).then(function (text) {
+      ticker = parseTicker(text, serverNow());
+      tickerHint = ticker.length ? '' : TICKER_EMPTY;
+    }, tryNext);
+  }
+  return Promise.resolve().then(tryNext).then(drawTicker);
 }
 
 /* Одна копия ленты: объявления через разделитель, разделитель ставится
@@ -216,7 +228,8 @@ function tickerTape(live) {
   tape.className = 'ticker__tape';
   live.forEach(function (it) {
     var s = document.createElement('span');
-    s.className = 'ticker__item' + (it.imp ? ' ticker__item--imp' : '');
+    s.className = 'ticker__item' + (it.imp ? ' ticker__item--imp' : '') +
+                                   (it.hint ? ' ticker__item--hint' : '');
     s.textContent = it.text;
     tape.appendChild(s);
     var sep = document.createElement('span');
@@ -243,6 +256,8 @@ function drawTicker() {
     live.push(it);
   }
 
+  if (!live.length && tickerHint) live = [{ text: tickerHint, hint: true }];
+
   if (!live.length) {
     /* Показывать нечего — полосы нет совсем, и её высота достаётся
        таблице: пустая черта внизу экрана съедала бы кегль ни за что. */
@@ -261,7 +276,9 @@ function drawTicker() {
      нельзя: анимация пошла бы с начала и строка раз в минуту прыгала бы
      назад. Размер полосы входит в подпись потому, что от него зависят и
      кегль, и число копий ленты. */
-  var sig = live.map(function (x) { return (x.imp ? '!' : 't') + x.text; }).join('\n') +
+  var sig = live.map(function (x) {
+    return (x.imp ? '!' : x.hint ? '?' : 't') + x.text;
+  }).join('\n') +
             '\n' + el.clientWidth + 'x' + el.clientHeight;
   if (sig === tickerSig) return;
   tickerSig = sig;
@@ -840,7 +857,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 31;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 32;   /* поднимайте вместе с ?v= в tv.html */
 
 /* Версия — в заголовок вкладки. На телевизоре его не видно (табло идёт во
    весь экран), зато в обычном браузере сразу ясно, какие файлы загружены:
