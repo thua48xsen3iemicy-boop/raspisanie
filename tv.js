@@ -34,6 +34,12 @@ var BAR_PAD_X = 10;        // поле шапки и нижней полосы
    низкой строке, 0 разрешит его на любой. */
 var SPLIT_MIN_ROW_PX = 24;
 
+/* Период пульсации пометок, секунд. Медленное дыхание, а не мигание:
+   табло висит в холле весь день, и частый пульс на нём утомляет.
+   Держите его равным периоду в tv.css (.cell--chg::after) — здесь он
+   нужен лишь для того, чтобы правильно посчитать сдвиг фазы. */
+var PULSE_SEC = 3.6;
+
 /* Кегль названия группы в шапке полосы, долями высоты строки. В шапке одна
    строка, а не две, как в занятии, поэтому надпись может занять высоту
    почти целиком: HEAD_MAX подобран так, что вместе с межстрочным и полями
@@ -115,6 +121,7 @@ var groups = [];    // [{title, at: {'дата/пара': урок}}]
 var view = null;    // {rows, days, from, to}
 var skew = 0;       // расхождение часов телевизора и сервера
 var splitPending = [];  // занятия-кандидаты на разворот, по номеру в data-split
+var rebasePending = qs.indexOf('rebase') >= 0;   // ?rebase — один раз за загрузку
 
 function serverNow() { return Date.now() + skew; }
 
@@ -232,6 +239,15 @@ function build() {
     g.at = at;
   });
 
+  /* Пометки изменений — здесь, а не в draw(): она вызывается и по таймеру,
+     и на изменение размера окна, а точку отсчёта надо трогать только тогда,
+     когда пришли свежие файлы. */
+  markChanges(groups, days, { off: qs.indexOf('nodiff') >= 0, rebase: rebasePending });
+  /* ?rebase остаётся в адресе, а файлы перечитываются каждые десять минут:
+     не гаси его после первого раза — точка отсчёта сбрасывалась бы вместе
+     с ними, и на таком адресе изменения не показались бы никогда. */
+  rebasePending = false;
+
   view = { rows: rows, days: days, pairs: pairs };
 }
 
@@ -293,6 +309,16 @@ function splitBody(lesson) {
   return lesson.variants.map(function (v) {
     return metaHtml(esc(v.who), v.room ? roomHtml(v.room) : '');
   }).join('');
+}
+
+/* Класс пометки для ячейки. Зелёным — занятие появилось или изменилось,
+   красным — снято; что именно поменялось, табло не разбирает: важен сам
+   факт. Прошедшие дни красятся тем же цветом, но не пульсируют — что
+   менялось в понедельник, в среду уже никого не торопит, а мигающего
+   зелёного к пятнице набралось бы на пол-экрана. */
+function markClass(mark, past) {
+  if (!mark) return '';
+  return ' cell--' + (mark === 'off' ? 'off' : 'chg') + (past ? ' cell--calm' : '');
 }
 
 function cellHtml(lesson, key, band) {
@@ -437,6 +463,12 @@ function draw() {
   root.style.setProperty('--barpadx', snap(BAR_PAD_X) + 'px');
   root.style.setProperty('--pady', padY + 'px');
   root.style.setProperty('--bandgap', bandGap + 'px');
+  /* Фаза пульсации. Таблица перерисовывается раз в минуту целиком, и без
+     сдвига анимация каждый раз начиналась бы заново — раз в минуту все
+     пометки разом прыгали бы в начало цикла. Отрицательная задержка от
+     общих часов делает пульс непрерывным поверх перерисовок. */
+  root.style.setProperty('--pulse',
+    (-(serverNow() / 1000 % PULSE_SEC)).toFixed(2) + 's');
 
   /* clientWidth и clientHeight включают внутренние отступы — вычитаем их,
      иначе полоса получается шире содержимого на два отступа, уезжает
@@ -510,6 +542,7 @@ function draw() {
   els.date.textContent = week;
 
   var today = dmy(serverNow());
+  var todayNum = dkey(today);
 
   var html = '';
   splitPending = [];
@@ -537,6 +570,7 @@ function draw() {
     view.rows.forEach(function (r) {
       var key = r.date + '/' + r.num;
       var isToday = r.date === today;
+      var isPast = dkey(r.date) < todayNum;
       /* чередование фона по дням: без него шесть дней подряд
          сливаются в одно полотно */
       var band = r.di % 2 ? ' dim' : '';
@@ -552,7 +586,10 @@ function draw() {
         '<span class="slot__time">' + esc(r.start) + '</span></div>';
 
       var cellBand = band + (isToday ? ' cell--today' : '');
-      slice.forEach(function (g) { html += cellHtml(g.at[key], key, cellBand); });
+      slice.forEach(function (g) {
+        html += cellHtml(g.at[key], key,
+          cellBand + markClass(g.marks && g.marks[key], isPast));
+      });
       for (var q = 0; q < padCount; q++) {
         html += '<div class="cell cell--pad' + band + '"></div>';
       }
@@ -681,7 +718,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 29;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 30;   /* поднимайте вместе с ?v= в tv.html */
 
 /* Версия — в заголовок вкладки. На телевизоре его не видно (табло идёт во
    весь экран), зато в обычном браузере сразу ясно, какие файлы загружены:
