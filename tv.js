@@ -12,6 +12,16 @@
    parse.js здесь свой — копия корневого, см. README. */
 
 var RELOAD_MINUTES = 10;   // как часто перечитывать файлы расписаний
+/* Объявления для бегущей строки читаются чаще расписаний: файл крошечный,
+   а объявление обычно нужно показать прямо сейчас, а не через десять минут. */
+var TICKER_MINUTES = 1;    // как часто перечитывать объявления
+var TICKER_VH = 2;         // высота нижней полосы, сотых экрана
+/* Скорость бегущей строки — физических пикселей в секунду, как и всё
+   прочее в этом файле. В CSS-пикселях её задавать нельзя: на 4K при
+   масштабе 150% строка ползла бы в полтора раза медленнее, чем на
+   обычном экране, хотя буквы на ней ровно того же размера.
+   Сдвигается из адреса: tv.html?tickspeed=90 — медленнее. */
+var TICKER_SPEED_PX = 140;
 var MAX_BANDS = 4;         // на сколько полос разрешено переносить таблицу
 var GOOD_COL_PX = 150;     // ширина колонки группы, при которой читается легко
 var GOOD_ROW_PX = 30;      // высота строки, при которой читается легко
@@ -76,6 +86,9 @@ var TIME_MIN = 0.41;
    Если разложите иначе, поправьте только эти два пути. */
 var GROUPS_DIR = '../s/';
 var LIST_URL = '../list.txt';
+/* Объявления лежат там же, где список групп: каталог табло — это код,
+   а содержимое живёт уровнем выше. Формат файла описан в parse.js. */
+var TICKER_URL = '../ticker.txt';
 
 var qs = location.search;
 function num(name, def) {
@@ -105,6 +118,8 @@ var BLEED_X = num('bleed', 0);         // tv.html?bleed=92 — вылезти з
 var BLEED_Y = num('bleedy', 0);        // tv.html?bleedy=48 — то же сверху и снизу
 var FORCED_PER = num('groups', 0);     // tv.html?groups=8 — групп в полосе
 var FORCED_BANDS = num('bands', 0);    // tv.html?bands=2 — полос в таблице
+var TICKER_SPEED = num('tickspeed', TICKER_SPEED_PX);
+var NO_TICKER = qs.indexOf('noticker') >= 0;   // tv.html?noticker — без бегущей строки
 if (qs.indexOf('dark') >= 0) document.documentElement.setAttribute('data-tv', 'dark');
 
 var els = {
@@ -122,6 +137,8 @@ var view = null;    // {rows, days, from, to}
 var skew = 0;       // расхождение часов телевизора и сервера
 var splitPending = [];  // занятия-кандидаты на разворот, по номеру в data-split
 var rebasePending = qs.indexOf('rebase') >= 0;   // ?rebase — один раз за загрузку
+var ticker = [];    // объявления из ticker.txt, вместе со сроками показа
+var tickerSig = ''; // что сейчас набрано в ленте — чтобы не пересобирать зря
 
 function serverNow() { return Date.now() + skew; }
 
@@ -175,6 +192,104 @@ function loadAll() {
       return failed;
     });
   });
+}
+
+/* ── Бегущая строка ─────────────────────────────────────── */
+
+function loadTicker() {
+  if (NO_TICKER) return Promise.resolve();
+  return get(TICKER_URL).then(function (text) {
+    ticker = parseTicker(text, serverNow());
+  }).catch(function () {
+    /* Файла может не быть вовсе, и это не поломка, а «объявлений нет».
+       В шапку такое не выносим: надпись там отведена под расписания,
+       и сообщение о ненайденном ticker.txt висело бы на табло каждый день
+       у тех, кто бегущей строкой не пользуется. */
+    ticker = [];
+  }).then(drawTicker);
+}
+
+/* Одна копия ленты: объявления через разделитель, разделитель ставится
+   и после последнего — им копия стыкуется со следующей. */
+function tickerTape(live) {
+  var tape = document.createElement('span');
+  tape.className = 'ticker__tape';
+  live.forEach(function (it) {
+    var s = document.createElement('span');
+    s.className = 'ticker__item' + (it.imp ? ' ticker__item--imp' : '');
+    s.textContent = it.text;
+    tape.appendChild(s);
+    var sep = document.createElement('span');
+    sep.className = 'ticker__sep';
+    sep.textContent = '\u2022';
+    tape.appendChild(sep);
+  });
+  return tape;
+}
+
+function drawTicker() {
+  var el = els.ticker;
+  if (!el) return;
+
+  /* Отбор по сроку — перед каждым показом, а не при чтении файла: табло
+     висит сутками, и день на нём сменяется чаще, чем перечитывается
+     ticker.txt. */
+  var today = dkey(dmy(serverNow()));
+  var live = [];
+  for (var i = 0; i < ticker.length; i++) {
+    var it = ticker[i];
+    if (it.from && today < it.from) continue;
+    if (it.to && today > it.to) continue;
+    live.push(it);
+  }
+
+  if (!live.length) {
+    /* Показывать нечего — полосы нет совсем, и её высота достаётся
+       таблице: пустая черта внизу экрана съедала бы кегль ни за что. */
+    el.style.display = 'none';
+    el.innerHTML = '';
+    tickerSig = '';
+    return;
+  }
+  el.style.display = '';
+
+  var dpr = window.devicePixelRatio || 1;
+  el.style.height = Math.floor(window.innerHeight / 100 * TICKER_VH * dpr) / dpr + 'px';
+
+  /* Пересобираем ленту, только когда есть что менять. Объявления
+     перечитываются раз в минуту, и переписывать разметку каждый раз
+     нельзя: анимация пошла бы с начала и строка раз в минуту прыгала бы
+     назад. Размер полосы входит в подпись потому, что от него зависят и
+     кегль, и число копий ленты. */
+  var sig = live.map(function (x) { return (x.imp ? '!' : 't') + x.text; }).join('\n') +
+            '\n' + el.clientWidth + 'x' + el.clientHeight;
+  if (sig === tickerSig) return;
+  tickerSig = sig;
+
+  el.innerHTML = '';
+  var line = document.createElement('div');
+  line.className = 'ticker__line';
+  var tape = tickerTape(live);
+  line.appendChild(tape);
+  el.appendChild(line);
+
+  /* Лента повторяется столько раз, чтобы копий с запасом хватило на всю
+     ширину экрана. Тогда сдвиг ровно на ширину одной копии замыкается сам
+     на себя: в конце круга на месте начала ленты стоит начало соседней
+     копии, шва не видно и остановки в конце нет. */
+  var tapeW = tape.getBoundingClientRect().width;
+  /* Ширины нет — значит, мерить было нечего (полоса скрыта, шрифт ещё не
+     подъехал). Подпись сбрасываем, чтобы следующая минута попробовала
+     снова, а не приняла нерабочую ленту за уже нарисованную. */
+  if (tapeW < 1) { tickerSig = ''; return; }
+  for (var c = Math.ceil(el.clientWidth / tapeW); c > 0; c--) {
+    line.appendChild(tape.cloneNode(true));
+  }
+
+  line.style.setProperty('--tape', tapeW + 'px');
+  /* Длительность круга считается от постоянной скорости, а не задаётся
+     сама по себе: иначе короткое объявление ползло бы, а длинное летело. */
+  line.style.animationDuration = (tapeW / (TICKER_SPEED / dpr)).toFixed(2) + 's';
 }
 
 /* ── Сборка сетки недели ────────────────────────────────── */
@@ -424,12 +539,6 @@ function bleed() {
 
 function draw() {
   bleed();
-  if (!view) {
-    els.day.textContent = 'Расписание не заполнено';
-    els.date.textContent = '';
-    els.board.innerHTML = '<p class="msg">В файлах групп нет ни одного учебного дня</p>';
-    return;
-  }
 
   /* Всё меряем в физических пикселях экрана, а не в CSS-пикселях.
      На 4K телевизоре браузер обычно работает с дробным масштабом: один
@@ -442,7 +551,9 @@ function draw() {
   var hair = Math.max(1, Math.round(dpr)) / dpr;
 
   /* Поле отдаём странице целиком, а не таблице: под обрез иначе попадали бы
-     и часы, и герб. Ставим до замеров — иначе посчитаем по старым размерам. */
+     и часы, и герб. Ставим до замеров — иначе посчитаем по старым размерам.
+     Полю здесь же и место: оно нужно и тогда, когда расписаний нет вовсе
+     и дальше мы не пойдём. */
   var pctY = window.innerHeight * SAFE_PCT / 100;
   var pctX = window.innerWidth * SAFE_PCT / 100;
   document.body.style.padding =
@@ -450,9 +561,20 @@ function draw() {
     snap(safeSide('safex', SAFE_X_PX, pctX)) + 'px ' +
     snap(safeSide('safebot', SAFE_BOT_PX, pctY)) + 'px';
 
+  /* Лента — до замеров таблицы: высоту та считает от остатка экрана,
+     а полосы внизу может не быть вовсе. Но после полей: ширину ленты
+     иначе замерили бы по всему экрану, а она стоит внутри поля. */
+  drawTicker();
+
+  if (!view) {
+    els.day.textContent = 'Расписание не заполнено';
+    els.date.textContent = '';
+    els.board.innerHTML = '<p class="msg">В файлах групп нет ни одного учебного дня</p>';
+    return;
+  }
+
   var vh = window.innerHeight / 100;
   if (els.bar) els.bar.style.height = snap(vh * 4.4) + 'px';
-  if (els.ticker) els.ticker.style.height = snap(vh * 2) + 'px';
 
   /* Поля кладём на корень документа, а не на таблицу: тогда шапка и нижняя
      полоса берут ровно те же отступы и их края совпадают с краями таблицы. */
@@ -718,7 +840,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 30;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 31;   /* поднимайте вместе с ?v= в tv.html */
 
 /* Версия — в заголовок вкладки. На телевизоре его не видно (табло идёт во
    весь экран), зато в обычном браузере сразу ясно, какие файлы загружены:
@@ -736,11 +858,16 @@ function refresh() {
   });
 }
 
-window.addEventListener('resize', function () { if (view) draw(); });
+/* Лента живёт отдельно от таблицы: расписания могут не открыться вовсе,
+   а объявления в этом случае показать всё равно нужно. */
+window.addEventListener('resize', function () { if (view) draw(); else drawTicker(); });
 
 clock();
 setInterval(clock, 10000);
 setInterval(refresh, RELOAD_MINUTES * 60000);
-/* раз в минуту — чтобы подсветка переходила на следующую пару */
-setInterval(function () { if (view) draw(); }, 60000);
+setInterval(loadTicker, TICKER_MINUTES * 60000);
+/* раз в минуту — чтобы подсветка переходила на следующую пару,
+   а объявление с истёкшим сроком уходило с полосы */
+setInterval(function () { if (view) draw(); else drawTicker(); }, 60000);
 refresh();
+loadTicker();

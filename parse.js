@@ -197,6 +197,94 @@ function moment(date, time) {
 }
 
 
+/* ── Бегущая строка ─────────────────────────────
+   Объявления для нижней полосы табло лежат в ../ticker.txt — рядом
+   с list.txt и в том же виде: одна строка — одна запись, поля через палку.
+
+       тип|срок|текст
+
+   тип    — t обычное объявление, ! важное (выделяется цветом);
+   срок   — когда показывать; пусто — всегда:
+              до 10.09           по 10 сентября включительно
+              с 08.09            начиная с 8 сентября
+              с 08.09 до 12.09   окно показа
+              10.09              только в этот день
+            вместо «до» можно писать «по», год — необязателен;
+   текст  — всё остальное до конца строки; палки внутри него
+            разрешены — полей всего три, остаток склеивается обратно.
+
+   Пустые строки и строки с # в начале пропускаются. Строка вовсе без
+   палок считается обычным объявлением целиком: объявление, набранное
+   второпях без разметки, лучше показать, чем молча выбросить. А вот
+   строка с палками, но незнакомым типом отбрасывается — так же, как
+   это сделано со строками list.txt. */
+
+var TICK_FROM_RE = /(?:^|\s)с\s+(\d{1,2}\.\d{1,2}(?:\.\d{4})?)/i;
+var TICK_TO_RE = /(?:^|\s)(?:до|по)\s+(\d{1,2}\.\d{1,2}(?:\.\d{4})?)/i;
+var TICK_DATE_RE = /^(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?$/;
+
+/* Дата срока в ключ ГГГГММДД — в таком же виде считает дни tv.js.
+   Год можно не писать: без него берём тот из соседних трёх, в котором
+   дата ложится ближе всего к сегодняшнему дню. Иначе «до 10.01», набранное
+   в декабре, означало бы январь уже прошедший и объявление не показалось
+   бы ни разу. Близость меряем по календарю, а не вычитанием ключей:
+   от 20.12.2026 ключ 20260110 отстоит на 1110, а 20270110 — на 8890, хотя по
+   календарю второй ближе вдесятеро. */
+function tickDate(s, nowTs) {
+  var m = TICK_DATE_RE.exec(s || '');
+  if (!m) return 0;
+  var d = +m[1], mo = +m[2];
+  if (d < 1 || d > 31 || mo < 1 || mo > 12) return 0;
+
+  var y;
+  if (m[3]) y = +m[3];
+  else {
+    var now = nowTs + TZ_OFFSET_MIN * 60000;
+    var base = new Date(now).getUTCFullYear(), best = -1, bestDist = 0;
+    for (var i = -1; i <= 1; i++) {
+      var dist = Math.abs(Date.UTC(base + i, mo - 1, d) - now);
+      if (best < 0 || dist < bestDist) { best = base + i; bestDist = dist; }
+    }
+    y = best;
+  }
+  return y * 10000 + mo * 100 + d;
+}
+
+/* Разбор всего файла. Сроки отдаём ключами дат, а не готовым
+   ответом «показывать или нет»: файл перечитывается редко, а день за
+   это время может смениться — отбор по сроку делается перед каждым
+   показом. */
+function parseTicker(text, nowTs) {
+  var out = [];
+  (text || '').split(/\r?\n/).forEach(function (raw) {
+    var line = norm(raw);
+    if (!line || line.charAt(0) === '#') return;
+
+    var kind = 't', term = '', body = line;
+    if (line.indexOf('|') >= 0) {
+      var p = line.split('|');
+      kind = norm(p.shift()).toLowerCase();
+      term = norm(p.shift());
+      body = norm(p.join('|'));
+      if (kind !== 't' && kind !== '!') return;
+    }
+    if (!body) return;
+
+    var from = 0, to = 0, m;
+    if ((m = TICK_FROM_RE.exec(term))) from = tickDate(m[1], nowTs);
+    if ((m = TICK_TO_RE.exec(term))) to = tickDate(m[1], nowTs);
+    /* голая дата без предлога — один-единственный день показа */
+    if (!from && !to) from = to = tickDate(term, nowTs);
+
+    out.push({ text: body, imp: kind === '!', from: from, to: to });
+  });
+  return out;
+}
+
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseSchedule: parseSchedule, moment: moment, norm: norm };
+  module.exports = {
+    parseSchedule: parseSchedule, parseTicker: parseTicker,
+    moment: moment, norm: norm
+  };
 }
