@@ -46,7 +46,7 @@ var SPLIT_MIN_ROW_PX = 24;
 
 /* Период пульсации пометок, секунд. Медленное дыхание, а не мигание:
    табло висит в холле весь день, и частый пульс на нём утомляет.
-   Держите его равным периоду в tv.css (.cell--chg::after) — здесь он
+   Держите его равным периоду в tv.css (.mk--chg::after) — здесь он
    нужен лишь для того, чтобы правильно посчитать сдвиг фазы. */
 var PULSE_SEC = 3.6;
 
@@ -434,7 +434,20 @@ function splitBody(lesson) {
    зелёного к пятнице набралось бы на пол-экрана. */
 function markClass(mark, past) {
   if (!mark) return '';
-  return ' cell--' + (mark === 'off' ? 'off' : 'chg') + (past ? ' cell--calm' : '');
+  return ' mk--' + (mark === 'off' ? 'off' : 'chg') + (past ? ' mk--calm' : '');
+}
+
+/* Пометка на названии группы: в этой колонке что-то тронуто. Живые
+   пометки главнее прошедших — шапка говорит прежде всего о том, что ещё
+   впереди, и пульсирует только ради этого. Когда всё тронутое уже прошло,
+   название остаётся отмеченным, но спокойным. */
+function headMark(g, todayNum) {
+  var keys = Object.keys(g.marks || {});
+  if (!keys.length) return '';
+  var live = keys.filter(function (k) { return dkey(k.split('/')[0]) >= todayNum; });
+  var use = live.length ? live : keys;
+  var chg = use.some(function (k) { return g.marks[k] === 'chg'; });
+  return ' mk--' + (chg ? 'chg' : 'off') + (live.length ? '' : ' mk--calm');
 }
 
 function cellHtml(lesson, key, band) {
@@ -689,7 +702,8 @@ function draw() {
     /* шапка полосы: угол на две левые колонки и названия групп */
     html += '<div class="head head--corner">Пара</div>';
     slice.forEach(function (g) {
-      html += '<div class="head head--group">' + esc(g.title) + '</div>';
+      html += '<div class="head head--group' + headMark(g, todayNum) +
+        '">' + esc(g.title) + '</div>';
     });
     for (var q = 0; q < padCount; q++) html += '<div class="head head--pad"></div>';
 
@@ -752,16 +766,16 @@ function diag() {
      о цвете её слоя. Прозрачно — значит на сервере старый файл стилей,
      и пометки в разметке есть, а на экране их не видно. */
   var probe = document.createElement('div');
-  probe.className = 'cell cell--chg';
+  probe.className = 'cell mk--chg';
   probe.style.cssText = 'position:absolute;left:-9999px;width:10px;height:10px';
   document.body.appendChild(probe);
   var paint = window.getComputedStyle(probe, '::after').backgroundColor;
   document.body.removeChild(probe);
   var cssLive = paint && paint !== 'transparent' && paint.indexOf('rgba(0, 0, 0, 0') !== 0;
 
-  var chg = els.board.querySelectorAll('.cell--chg').length;
-  var off = els.board.querySelectorAll('.cell--off').length;
-  var calm = els.board.querySelectorAll('.cell--calm').length;
+  var chg = els.board.querySelectorAll('.cell.mk--chg').length;
+  var off = els.board.querySelectorAll('.cell.mk--off').length;
+  var calm = els.board.querySelectorAll('.cell.mk--calm').length;
 
   var info = baseInfo(view ? view.days : []);
   var rows = info.days.map(function (d) {
@@ -891,7 +905,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 32;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 34;   /* поднимайте вместе с ?v= в tv.html */
 
 /* Версия — в заголовок вкладки. На телевизоре его не видно (табло идёт во
    весь экран), зато в обычном браузере сразу ясно, какие файлы загружены:
