@@ -429,6 +429,17 @@ body{
   .cell--chg::after,.cell--off::after{animation:none;opacity:.3}
 }
 
+/* Справка о пометках: tv.html?diag. Поверх таблицы, читаемым кеглем —
+   её смотрят с ноутбука или с телефона, поднеся его к экрану, а не из
+   дальнего конца холла. */
+.diag{
+  position:fixed;left:2vh;top:2vh;z-index:10;margin:0;
+  padding:1.4vh 1.8vh;border-radius:.8vh;
+  background:rgba(15,22,34,.92);color:#f2f5fa;
+  font-family:var(--mono);font-size:1.5vh;line-height:1.5;
+  white-space:pre;pointer-events:none
+}
+
 /* Подсветка идущей пары отключена. Правила лежали здесь: фон
    rgba(var(--now-rgb),.45) на ячейках строки и .75 на номере пары. */
 

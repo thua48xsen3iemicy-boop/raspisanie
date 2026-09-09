@@ -7,7 +7,7 @@
 <!-- Число в ?v= — метка версии. Меняйте его при каждой правке
      tv.css, parse.js, diff.js или tv.js, иначе телевизор возьмёт файлы
      из кеша. То же число — в VERSION в начале tv.js. -->
-<link rel="stylesheet" href="tv.css?v=31">
+<link rel="stylesheet" href="tv.css?v=32">
 <!--
   Табло для телевизора в холле. Открывать в браузере на весь экран (F11).
   Каталог самостоятельный: расписания берутся из ../s/, список из ../list.txt.
@@ -36,6 +36,8 @@
                          недели и считать изменения заново (нужно, если
                          в точку отсчёта попала заведомо кривая выгрузка);
                          срабатывает один раз за загрузку страницы
+    tv.html?diag       — справка поверх таблицы: откуда табло ведёт отсчёт
+                         изменений и почему пометок нет
 
   Бегущая строка. Объявления лежат в ../ticker.txt — рядом с list.txt и в
   том же виде: одна строка — одна запись, поля через палку.
@@ -86,8 +88,8 @@
      пространство сама. -->
 <footer class="ticker" id="ticker"></footer>
 
-<script src="parse.js?v=31" defer></script>
-<script src="diff.js?v=31" defer></script>
-<script src="tv.js?v=31" defer></script>
+<script src="parse.js?v=32" defer></script>
+<script src="diff.js?v=32" defer></script>
+<script src="tv.js?v=32" defer></script>
 </body>
 </html>

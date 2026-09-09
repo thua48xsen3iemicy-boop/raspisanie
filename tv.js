@@ -137,6 +137,7 @@ var view = null;    // {rows, days, from, to}
 var skew = 0;       // расхождение часов телевизора и сервера
 var splitPending = [];  // занятия-кандидаты на разворот, по номеру в data-split
 var rebasePending = qs.indexOf('rebase') >= 0;   // ?rebase — один раз за загрузку
+var lastFailed = 0;     // сколько файлов не открылось в последней загрузке
 var ticker = [];    // объявления из ticker.txt, вместе со сроками показа
 var tickerSig = ''; // что сейчас набрано в ленте — чтобы не пересобирать зря
 
@@ -570,6 +571,9 @@ function draw() {
     els.day.textContent = 'Расписание не заполнено';
     els.date.textContent = '';
     els.board.innerHTML = '<p class="msg">В файлах групп нет ни одного учебного дня</p>';
+    /* Справку показываем и здесь: пустое расписание — как раз тот случай,
+       ради которого её и открывают. */
+    if (qs.indexOf('diag') >= 0) diag();
     return;
   }
 
@@ -734,6 +738,53 @@ function draw() {
      serverNow() попадает между r.from и r.to, и повесить класс now на все
      ячейки с её data-k — время в строках по-прежнему считается. */
 
+  if (qs.indexOf('diag') >= 0) diag();
+}
+
+/* ── Справка о пометках: tv.html?diag ────────────────────────
+   «Подсветки нет» — это семь разных неисправностей с одним лицом: не
+   доехал diff.js, не доехал tv.css, браузер не даёт писать в хранилище,
+   точку отсчёта сняли только что, файлы не открылись, изменений и правда
+   нет. Гадать по внешнему виду бесполезно, поэтому табло само отвечает,
+   что оно знает. Показывается поверх таблицы и только по параметру. */
+function diag() {
+  /* Живы ли правила из tv.css: пробную ячейку с классом пометки спрашиваем
+     о цвете её слоя. Прозрачно — значит на сервере старый файл стилей,
+     и пометки в разметке есть, а на экране их не видно. */
+  var probe = document.createElement('div');
+  probe.className = 'cell cell--chg';
+  probe.style.cssText = 'position:absolute;left:-9999px;width:10px;height:10px';
+  document.body.appendChild(probe);
+  var paint = window.getComputedStyle(probe, '::after').backgroundColor;
+  document.body.removeChild(probe);
+  var cssLive = paint && paint !== 'transparent' && paint.indexOf('rgba(0, 0, 0, 0') !== 0;
+
+  var chg = els.board.querySelectorAll('.cell--chg').length;
+  var off = els.board.querySelectorAll('.cell--off').length;
+  var calm = els.board.querySelectorAll('.cell--calm').length;
+
+  var info = baseInfo(view ? view.days : []);
+  var rows = info.days.map(function (d) {
+    return d.has
+      ? d.date + '  снята ' + (d.at || 'до этой версии') + ', групп ' + d.groups
+      : d.date + '  точки отсчёта нет';
+  });
+
+  var lines = [
+    'Табло v' + VERSION + ' · пометки изменений',
+    'файл стилей: ' + (cssLive ? 'свежий' : 'СТАРЫЙ — пометки не видны'),
+    'хранилище браузера: ' + (info.works ? 'работает' : 'НЕДОСТУПНО — отсчёт не ведётся'),
+    'групп загружено: ' + groups.length + (lastFailed ? ', не открылось: ' + lastFailed : ''),
+    'пометок на экране: изменено ' + chg + ', снято ' + off +
+      (calm ? ' (из них в прошедших днях: ' + calm + ')' : ''),
+    'точки отсчёта:'
+  ].concat(rows.map(function (r) { return '  ' + r; }));
+
+  var box = document.getElementById('diag') || document.createElement('pre');
+  box.id = 'diag';
+  box.className = 'diag';
+  box.textContent = lines.join('\n');
+  if (!box.parentNode) document.body.appendChild(box);
 }
 
 /* ── Подгонка высоты ────────────────────────────────────────
@@ -840,7 +891,7 @@ function clock() {
   else if (!shownDate) shownDate = today;
 }
 
-var VERSION = 31;   /* поднимайте вместе с ?v= в tv.html */
+var VERSION = 32;   /* поднимайте вместе с ?v= в tv.html */
 
 /* Версия — в заголовок вкладки. На телевизоре его не видно (табло идёт во
    весь экран), зато в обычном браузере сразу ясно, какие файлы загружены:
@@ -849,6 +900,7 @@ document.title = 'Расписание на неделю · v' + VERSION;
 
 function refresh() {
   loadAll().then(function (failed) {
+    lastFailed = failed;
     els.note.textContent = failed ? 'Не открылось расписаний: ' + failed : '';
     build();
     clock();   /* часы сверены с сервером только теперь, обновляем сразу */
