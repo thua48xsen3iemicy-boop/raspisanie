@@ -91,6 +91,34 @@ function prune(s, keepFrom) {
   } catch (e) { /* пропускаем */ }
 }
 
+/* Отметка времени, когда снята точка отсчёта. Нужна не коду, а человеку:
+   когда на табло «нет подсветки», первый вопрос — от чего вообще идёт
+   отсчёт и не сбросился ли он вчера вместе с профилем браузера. */
+function stampNow() {
+  var d = new Date();
+  function p(n) { return ('0' + n).slice(-2); }
+  return p(d.getDate()) + '.' + p(d.getMonth() + 1) + ' ' +
+         p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/* Что хранилище знает о показываемых днях — для tv.html?diag. */
+function baseInfo(days) {
+  var s = store();
+  if (!s) return { works: false, days: [] };
+  return {
+    works: true,
+    days: days.map(function (day) {
+      var rec = readDay(s, day.date);
+      return {
+        date: day.date,
+        has: !!rec,
+        at: rec && rec.at ? rec.at : '',
+        groups: rec ? Object.keys(rec.g).length : 0
+      };
+    })
+  };
+}
+
 /* Проставляет g.marks['дата/пара'] = 'chg' | 'off' для каждой группы.
    'chg' — занятие появилось или изменилось, 'off' — было и снято. */
 function markChanges(groups, days, opts) {
@@ -107,7 +135,7 @@ function markChanges(groups, days, opts) {
     var date = day.date;
     var rec = opts.rebase ? null : readDay(s, date);
     var dirty = !rec;
-    if (!rec) rec = { v: 1, g: {} };
+    if (!rec) rec = { v: 1, at: stampNow(), g: {} };
 
     groups.forEach(function (g) {
       var now = snapshot(g, date);
@@ -134,5 +162,5 @@ function markChanges(groups, days, opts) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { markChanges: markChanges, sig: sig };
+  module.exports = { markChanges: markChanges, sig: sig, baseInfo: baseInfo };
 }
